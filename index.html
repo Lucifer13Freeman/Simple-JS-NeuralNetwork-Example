@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>Neuronet</title>
+        <script src="https://unpkg.com/brain.js@2.0.0-beta.4/dist/brain-browser.js"></script>
+    </head>
+    <body>
+        <canvas id="canvas" style="display: block;">Something went wrong...</canvas>
+        <button id="btn_clear" class="btn">Clear</button>
+        <button id="btn_train_ai" class="btn">Train</button>
+        <button id="btn_ask_ai" class="btn">Ask AI</button>
+        <button id="btn_retrain" class="btn">Retrain</button>
+
+        <style>
+            body {
+                background-color: #333;
+            }
+            #canvas {
+                position: absolute;
+                top: 0; right: 0; bottom: 0; left: 0;
+                margin: auto;
+                background-color: white;
+            }
+            .btn {
+                font-size: 14px;
+                border-radius: 4px;
+                color: #fff;
+                background: #450000bb;
+                padding: 6px 24px;
+                margin: 4px 0;
+                outline: none;
+                border-radius: 10px;
+                border: 1px solid #450000bb;
+            }
+            .btn:hover {
+                cursor: pointer;
+                background: #500000a1;
+            }
+            .btn:active {
+                background: #720000a1;
+            }
+        </style>
+
+        <script>
+
+            const CANVAS_SIZE = 500;
+            const CANVAS_WIDTH = CANVAS_SIZE;
+            const CANVAS_HEIGHT = CANVAS_SIZE;
+            const DRAW_LINE_WIDTH = 1;
+            const PIXEL = 20;
+            
+            const btn_clear = document.getElementById('btn_clear');
+            const btn_train_ai = document.getElementById('btn_train_ai');
+            const btn_ask_ai = document.getElementById('btn_ask_ai');
+            const btn_retrain = document.getElementById('btn_retrain');
+
+            class Canvas
+            {
+                constructor(el) 
+                {
+                    this.line_width = DRAW_LINE_WIDTH | 1;
+                    this.pixel = PIXEL | 20;
+                    this.is_mouse_down = false;
+                    this.is_with_text = false;
+
+                    this.canvas = el;
+
+                    this.canvas.width = CANVAS_WIDTH | 500;
+                    this.canvas.height = CANVAS_HEIGHT | 500;
+
+                    this.ctx = el.getContext('2d');
+
+                    this.refresh();
+
+                    this.canvas.addEventListener('mousedown', this.on_mouse_down.bind(this));
+                    this.canvas.addEventListener('mouseup', this.on_mouse_up.bind(this));
+                    this.canvas.addEventListener('mousemove', this.on_mouse_move.bind(this));
+                }
+
+                on_mouse_down(e)
+                {
+                    if (this.is_with_text) this.clear();
+                    this.is_mouse_down = true;
+                    this.ctx.beginPath();
+                }
+
+                on_mouse_up(e)
+                {
+                    this.is_mouse_down = false;
+                    this.ctx.closePath();
+                }
+
+                on_mouse_move(e)
+                {
+                    if (this.is_mouse_down)
+                    {
+                        this.ctx.fillStyle = 'red';
+                        this.ctx.strokeStyle = 'red';
+                        this.ctx.lineWidth = this.pixel;
+
+                        this.ctx.lineTo(e.offsetX, e.offsetY);
+                        this.ctx.stroke();
+
+                        this.ctx.beginPath();
+                        this.ctx.arc(e.offsetX, e.offsetY, this.pixel / 2, 0, Math.PI * 2);
+                        this.ctx.fill();
+
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(e.offsetX, e.offsetY)
+                    }
+                }
+
+                fill_text()
+                {
+                    this.ctx.font = '28px sans-serif';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.textBaseline = 'middle';
+                    this.ctx.fillText('Draw anything...', this.canvas.width / 2, this.canvas.height / 2);
+                    this.is_with_text = true;
+                }
+
+                draw_line(from_x, from_y, to_x, to_y, color = 'gray', line_join = 'round')
+                {
+                    this.ctx.beginPath();
+                    this.ctx.strokeStyle = color;
+                    this.ctx.lineJoin = line_join;
+                    this.ctx.lineWidth = this.line_width;
+                    this.ctx.moveTo(from_x, from_y);
+                    this.ctx.lineTo(to_x, to_y);
+                    this.ctx.closePath();
+                    this.ctx.stroke();
+                }
+
+                draw_cell(x, y, w, h)
+                {
+                    this.ctx.fillStyle = 'blue';
+                    this.ctx.strokeStyle = 'blue';
+                    this.ctx.lineJoin = 'meter';
+                    this.ctx.lineWidth = this.line_width;
+                    this.ctx.rect(x, y, w, h);
+                    this.ctx.fill();
+                }
+
+                clear() 
+                {
+                    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                    this.is_with_text = false;
+                }
+
+                refresh()
+                {
+                    this.clear();
+                    this.ctx.lineWidth = this.line_width;
+                    this.ctx.lineJoin = "round";
+                    this.ctx.fillStyle = "#212121";
+                    this.ctx.strokeStyle = "#212121";
+                    this.fill_text();
+                }
+
+                draw_grid() 
+                {
+                    const w = this.canvas.width;
+                    const h = this.canvas.height;
+                    const p = w / this.pixel;
+
+                    const step_x = w / p;
+                    const step_y = h / p;
+
+                    for (let x = 0; x < w; x += step_x) this.draw_line(x, 0, x, h);
+                    for (let y = 0; y < h; y += step_y) this.draw_line(0, y, w, y);
+                }
+
+                convert_to_grid(is_draw = false)
+                {
+                    const w = this.canvas.width;
+                    const h = this.canvas.height;
+                    const p = w / this.pixel;
+
+                    const step_x = w / p;
+                    const step_y = h / p;
+
+                    const vector = [];
+                    let __draw = [];
+
+                    for (let x = 0; x < w; x += step_x) 
+                    {
+                        for (let y = 0; y < h; y += step_y)
+                        {
+                            const data = this.ctx.getImageData(x, y, step_x, step_y);
+
+                            let non_empty_pixels_count = 0;
+
+                            for (let i = 0; i < data.data.length; i += 10)
+                            {
+                                const is_empty = data.data[i] === 0;
+                                if (!is_empty) non_empty_pixels_count++;
+                            }
+
+                            if (non_empty_pixels_count > 1 && is_draw) __draw.push([x, y, step_x, step_y]);
+
+                            vector.push(non_empty_pixels_count > 1 ? 1 : 0);
+                        }
+                    }
+
+                    if (is_draw)
+                    {
+                        this.clear();
+                        this.draw_grid();
+
+                        for (let _d in __draw) 
+                        {
+                            this.draw_cell(__draw[_d][0], 
+                                            __draw[_d][1], 
+                                            __draw[_d][2], 
+                                            __draw[_d][3],);
+                        }
+                    }
+
+                    return vector;
+                }
+            }
+
+            let vector = [];
+            let net = null;
+            let train_data = [];
+
+            const canvas = new Canvas(document.getElementById('canvas'));
+
+            const clear = () =>
+            {
+                canvas.refresh();
+            }
+
+            const train_ai = () =>
+            {
+                vector = canvas.convert_to_grid(true);
+
+                if (confirm('Is positive?'))
+                {
+                    train_data.push(
+                    {
+                        input: vector,
+                        output: { positive: 1 }
+                    });
+                }
+                else
+                {
+                    train_data.push(
+                    {
+                        input: vector,
+                        output: { negative: 1 }
+                    });
+                }
+
+                setTimeout(() => canvas.refresh(), 1000);
+            }
+
+            const ask_ai = () =>
+            {
+                if (train_data.length > 1)
+                {
+                    net = new brain.NeuralNetwork();
+                    net.train(train_data, { log: true });
+
+                    const result = brain.likely(canvas.convert_to_grid(), net);
+                    alert(result);
+                }
+                else alert('Train neural network first...');
+            }
+
+            const retrain = () =>
+            {
+                train_data = [];
+            }
+
+            btn_clear.onclick = (e) => clear();
+            btn_train_ai.onclick = (e) => train_ai();
+            btn_ask_ai.onclick = (e) => ask_ai();
+            btn_retrain.onclick = (e) => retrain();
+
+            document.addEventListener('keypress', function(e)
+            {
+                switch (e.key.toLowerCase()) 
+                {
+                    case 'c':
+                        clear();
+                        break;
+
+                    case 'v':
+                        train_ai();
+                        break;
+
+                    case 'b':
+                        ask_ai();
+                        break;
+                    
+                    case 'n':
+                        retrain();
+                        break;
+                        
+                    default:
+                        break;
+                }
+            });
+
+        </script>
+    </body>
+</html>
